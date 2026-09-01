@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PRODUCTION policy: HTTPS only.
+
+  The debug build overrides this file (app/src/debug/res/xml/) so a local
+  FastAPI server can be reached over plain http during development.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

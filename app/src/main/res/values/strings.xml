@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Netra Sahayak</string>
+    <string name="app_subtitle">AI-Assisted Diabetic Retinopathy Screening</string>
+    <string name="disclaimer">AI screening support only. Final diagnosis must be confirmed by a qualified healthcare professional.</string>
+</resources>
