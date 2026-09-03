@@ -16,3 +16,13 @@ local.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Backend runtime/generated data
+backend/screening.db
+backend/uploads/
+backend/heatmaps/
