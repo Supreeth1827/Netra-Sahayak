@@ -43,6 +43,8 @@ class RemoteSyncDataSource(private val api: NetraApiService) : SyncDataSource {
                 confidence = screening.confidence,
                 heatmapUrl = screening.heatmapUrl,
                 recommendation = screening.recommendation,
+                imagePath = screening.imagePath ?: "",
+                heatmapPath = screening.heatmapUrl ?: "",
                 createdAtEpochMillis = screening.createdAt
             )
         )

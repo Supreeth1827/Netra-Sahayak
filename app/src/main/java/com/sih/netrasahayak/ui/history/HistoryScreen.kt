@@ -92,16 +92,23 @@ private fun HistoryRow(record: ScreeningEntity, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = drClass?.shortName ?: record.prediction,
+                    text = if (record.isPendingAnalysis) "Pending analysis"
+                    else drClass?.shortName ?: record.prediction,
                     style = MaterialTheme.typography.titleMedium,
-                    color = accent
+                    color = if (record.isPendingAnalysis) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        accent
+                    }
                 )
                 Spacer(Modifier.height(2.dp))
-                Text(
-                    text = "${(record.confidence.coerceIn(0f, 1f) * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (!record.isPendingAnalysis) {
+                    Text(
+                        text = "${(record.confidence.coerceIn(0f, 1f) * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             Icon(

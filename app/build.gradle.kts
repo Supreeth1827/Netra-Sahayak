@@ -26,11 +26,11 @@ android {
         // For a phone on the same Wi-Fi use e.g. "http://192.168.1.7:8000/"
         // For production use an https:// URL.
         // ---------------------------------------------------------------
-        buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:8000/\"")
+        buildConfigField("String", "BASE_URL", "\"http://10.59.27.192:8000/\"")
 
         // Development switch. true  -> fake results, no server needed.
         //                    false -> real Retrofit calls to BASE_URL.
-        buildConfigField("boolean", "USE_MOCK_API", "true")
+        buildConfigField("boolean", "USE_MOCK_API", "false")
     }
 
     buildTypes {

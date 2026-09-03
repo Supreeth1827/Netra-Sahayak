@@ -128,8 +128,14 @@ fun NetraNavHost(
 
                 // Move on only once a result actually exists.
                 LaunchedEffect(state.analysis) {
-                    if (state.analysis is AnalysisState.Success) {
-                        navController.navigate(Routes.RESULT)
+                    when (state.analysis) {
+                        is AnalysisState.Success -> navController.navigate(Routes.RESULT)
+                        is AnalysisState.QueuedOffline -> {
+                            navController.navigate(Routes.HISTORY) {
+                                popUpTo(Routes.HOME) { inclusive = false }
+                            }
+                        }
+                        else -> Unit
                     }
                 }
 

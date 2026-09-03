@@ -32,4 +32,15 @@ data class ScreeningEntity(
 
     /** false until the record has been pushed to a server. Drives the Sync screen. */
     @ColumnInfo(name = "synced") val synced: Boolean = false
-)
+) {
+    companion object {
+        /** Sentinel used for a screening captured offline but not analysed yet. */
+        const val PENDING_PREDICTION = "Pending offline analysis"
+
+        const val PENDING_RECOMMENDATION =
+            "Screening captured offline. Connect to the server and use Sync Data to analyse this image."
+    }
+
+    val isPendingAnalysis: Boolean
+        get() = prediction == PENDING_PREDICTION
+}

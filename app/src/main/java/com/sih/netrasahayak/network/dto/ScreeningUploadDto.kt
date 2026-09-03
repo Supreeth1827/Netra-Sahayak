@@ -19,5 +19,7 @@ data class ScreeningUploadDto(
     @SerializedName("confidence") val confidence: Float,
     @SerializedName("heatmap_url") val heatmapUrl: String?,
     @SerializedName("recommendation") val recommendation: String,
+    @SerializedName("image_path") val imagePath: String,
+    @SerializedName("heatmap_path") val heatmapPath: String,
     @SerializedName("created_at") val createdAtEpochMillis: Long
 )

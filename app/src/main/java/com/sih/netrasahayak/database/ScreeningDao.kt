@@ -23,6 +23,24 @@ interface ScreeningDao {
     @Query("SELECT COUNT(*) FROM screenings WHERE synced = 0")
     fun observePendingCount(): Flow<Int>
 
+    @Query("""
+        UPDATE screenings
+        SET prediction = :prediction,
+            confidence = :confidence,
+            heatmap_url = :heatmapUrl,
+            recommendation = :recommendation,
+            synced = :synced
+        WHERE id = :id
+    """)
+    suspend fun updateAnalysis(
+        id: Long,
+        prediction: String,
+        confidence: Float,
+        heatmapUrl: String?,
+        recommendation: String,
+        synced: Boolean
+    )
+
     @Query("UPDATE screenings SET synced = 1 WHERE id = :id")
     suspend fun markSynced(id: Long)
 

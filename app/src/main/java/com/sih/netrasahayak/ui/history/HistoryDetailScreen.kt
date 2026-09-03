@@ -110,7 +110,21 @@ fun HistoryDetailScreen(
 
         Spacer(Modifier.height(24.dp))
 
-        if (drClass != null) {
+        if (screening.isPendingAnalysis) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Text(
+                    text = "Pending analysis",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(18.dp)
+                )
+            }
+        } else if (drClass != null) {
             ResultCard(drClass = drClass, confidence = screening.confidence)
         } else {
             Text(

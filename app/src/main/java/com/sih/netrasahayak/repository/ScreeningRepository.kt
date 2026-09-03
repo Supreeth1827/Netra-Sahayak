@@ -64,6 +64,56 @@ class ScreeningRepository(
         }
     }
 
+    /**
+     * Offline-first capture: copy the original image into private storage and
+     * create a pending row immediately. No network or AI inference is needed.
+     */
+    suspend fun savePending(
+        patient: PatientDetails,
+        imageUri: Uri
+    ): Outcome<Long> = withContext(Dispatchers.IO) {
+        try {
+            val storedImage = ImageUtils.copyOriginalToAppStorage(context, imageUri)
+                ?: return@withContext Outcome.Failure(AppError.StorageError)
+
+            val id = dao.insert(
+                ScreeningEntity(
+                    patientId = patient.patientId.trim(),
+                    age = patient.age,
+                    gender = patient.gender?.apiValue,
+                    diabetesDurationYears = patient.diabetesDurationYears,
+                    imagePath = storedImage.absolutePath,
+                    heatmapUrl = null,
+                    prediction = ScreeningEntity.PENDING_PREDICTION,
+                    confidence = 0f,
+                    recommendation = ScreeningEntity.PENDING_RECOMMENDATION,
+                    synced = false
+                )
+            )
+            Outcome.Success(id)
+        } catch (t: Throwable) {
+            Log.w(tag, "Could not save offline screening", t)
+            Outcome.Failure(AppError.StorageError)
+        }
+    }
+
+    /**
+     * Replaces the pending placeholder with the real server result.
+     */
+    suspend fun completePending(
+        id: Long,
+        result: ScreeningResult
+    ) = withContext(Dispatchers.IO) {
+        dao.updateAnalysis(
+            id = id,
+            prediction = result.drClass.apiLabel,
+            confidence = result.confidence,
+            heatmapUrl = result.heatmapUrl,
+            recommendation = result.recommendation,
+            synced = true
+        )
+    }
+
     suspend fun delete(id: Long) = withContext(Dispatchers.IO) {
         runCatching { dao.deleteById(id) }
         Unit

@@ -68,7 +68,12 @@ object ServiceLocator {
     }
 
     val syncRepository: SyncRepository by lazy {
-        SyncRepository(database.screeningDao(), connectivityObserver, syncDataSource)
+        SyncRepository(
+            dao = database.screeningDao(),
+            connectivity = connectivityObserver,
+            dataSource = syncDataSource,
+            inferenceRepository = inferenceRepository
+        )
     }
 
     /** A fresh camera controller per camera screen. */

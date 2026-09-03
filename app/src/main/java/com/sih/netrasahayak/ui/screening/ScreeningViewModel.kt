@@ -25,6 +25,7 @@ sealed interface AnalysisState {
     data object Idle : AnalysisState
     data object Analyzing : AnalysisState
     data class Success(val result: ScreeningResult) : AnalysisState
+    data class QueuedOffline(val recordId: Long) : AnalysisState
     data class Error(val error: AppError) : AnalysisState
 }
 
@@ -36,15 +37,6 @@ data class ScreeningUiState(
     val savedRecordId: Long? = null
 )
 
-/**
- * Drives the whole PATIENT -> IMAGE -> ANALYSE -> RESULT flow.
- *
- * One instance is shared by every screen in the "screening" navigation graph, so
- * the patient details and the chosen image survive navigation without being
- * squeezed into route arguments.
- *
- * The UI never touches Retrofit or Room - it only calls these methods.
- */
 class ScreeningViewModel(
     private val inferenceRepository: InferenceRepository,
     private val screeningRepository: ScreeningRepository
@@ -53,7 +45,6 @@ class ScreeningViewModel(
     private val _uiState = MutableStateFlow(ScreeningUiState())
     val uiState: StateFlow<ScreeningUiState> = _uiState.asStateFlow()
 
-    /** Name of the engine doing the work, e.g. "Demo mode (no server)". */
     val inferenceSourceName: String get() = inferenceRepository.sourceName
 
     fun setPatient(
@@ -74,7 +65,6 @@ class ScreeningViewModel(
         }
     }
 
-    /** Called after a capture or a gallery pick. Nothing is uploaded here. */
     fun setImage(uri: Uri) {
         _uiState.update {
             it.copy(imageUri = uri, analysis = AnalysisState.Idle, savedRecordId = null)
@@ -93,17 +83,10 @@ class ScreeningViewModel(
         }
     }
 
-    /**
-     * Uploads the image and asks for a screening result. Only ever triggered by
-     * the ANALYZE IMAGE button.
-     *
-     * A second tap while a request is in flight is ignored, so an image can
-     * never be submitted twice.
-     */
     fun analyze() {
         val state = _uiState.value
 
-        if (state.analysis is AnalysisState.Analyzing) return // duplicate submission guard
+        if (state.analysis is AnalysisState.Analyzing) return
 
         val patient = state.patient
         val imageUri = state.imageUri
@@ -122,8 +105,6 @@ class ScreeningViewModel(
         viewModelScope.launch {
             when (val outcome = inferenceRepository.analyze(imageUri, patient)) {
                 is Outcome.Success -> {
-                    // Save locally straight away: the record must survive even if
-                    // the phone goes offline right after the result arrives.
                     val saved = screeningRepository.save(patient, imageUri, outcome.data)
                     _uiState.update {
                         it.copy(
@@ -134,13 +115,30 @@ class ScreeningViewModel(
                 }
 
                 is Outcome.Failure -> {
-                    _uiState.update { it.copy(analysis = AnalysisState.Error(outcome.error)) }
+                    if (outcome.error == AppError.NoInternet) {
+                        when (val queued = screeningRepository.savePending(patient, imageUri)) {
+                            is Outcome.Success -> {
+                                _uiState.update {
+                                    it.copy(
+                                        analysis = AnalysisState.QueuedOffline(queued.data),
+                                        savedRecordId = queued.data
+                                    )
+                                }
+                            }
+                            is Outcome.Failure -> {
+                                _uiState.update {
+                                    it.copy(analysis = AnalysisState.Error(queued.error))
+                                }
+                            }
+                        }
+                    } else {
+                        _uiState.update { it.copy(analysis = AnalysisState.Error(outcome.error)) }
+                    }
                 }
             }
         }
     }
 
-    /** Clears everything so the next patient starts from a blank form. */
     fun reset() {
         _uiState.value = ScreeningUiState()
     }
