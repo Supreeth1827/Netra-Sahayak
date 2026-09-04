@@ -1,433 +1,779 @@
-# Netra Sahayak — Android Frontend
+# Netra Sahayak — Explainable AI for Diabetic Retinopathy Screening
 
-**AI-Assisted Diabetic Retinopathy Screening**
+**SIH26038 — Explainable AI for Diabetic Retinopathy Screening in Rural India**
 
 > AI screening support only. Final diagnosis must be confirmed by a qualified healthcare professional.
 
-An Android app for ASHA / rural health workers. It collects minimal patient details, captures or
-selects a retinal image, sends it to a FastAPI + EfficientNet backend for screening, and shows the
-suggestion together with a Grad-CAM explanation. Every screening is stored on the phone, so history
-works with no internet.
+Netra Sahayak is an AI-assisted diabetic retinopathy screening system designed for ASHA workers and rural healthcare workflows.
 
-The AI model is **not** part of this project — it is built separately in Python. This app is
-already wired for it.
+The project combines:
 
----
+- 📱 Android application for patient and screening workflow
+- 🧠 EfficientNet-B3 diabetic retinopathy classification
+- 🔥 Grad-CAM explainability
+- ⚡ FastAPI backend
+- 💾 SQLite database
+- 📦 Offline-first Room storage
+- 🔄 Automatic synchronization when connectivity returns
 
-## 1. Project structure
-
-```
-NetraSahayak/
-├── settings.gradle.kts, build.gradle.kts, gradle.properties
-├── gradle/libs.versions.toml          ← all dependency versions
-├── gradlew, gradle/wrapper/           ← Gradle 8.7 wrapper
-├── local.properties                   ← sdk.dir (not committed)
-├── IMPLEMENTATION_PLAN.md
-└── app/
-    ├── build.gradle.kts                ← BASE_URL and USE_MOCK_API live here
-    ├── src/debug/res/xml/               ← debug-only: allows cleartext http to a local server
-    └── src/main/
-        ├── AndroidManifest.xml
-        ├── res/                        ← strings, theme, launcher icon, file_paths,
-        │                                  network_security_config (HTTPS-only)
-        └── java/com/sih/netrasahayak/
-            ├── AppConfig.kt             backend URL, mock switch, timeouts
-            ├── NetraSahayakApp.kt       Application, initialises ServiceLocator
-            ├── MainActivity.kt          single Activity, hosts Compose
-            ├── di/ServiceLocator.kt     hand-written DI; mock vs real chosen here
-            ├── model/                   DrClass, PatientDetails, ScreeningResult,
-            │                            AppError, Outcome
-            ├── network/                 NetraApiService (Retrofit), dto/,
-            │                            RetrofitProvider, ConnectivityObserver
-            ├── database/                Room: ScreeningEntity, ScreeningDao, NetraDatabase
-            ├── camera/                  RetinalCameraController (interface),
-            │                            PhoneCameraController (CameraX), ImageUtils
-            ├── repository/              InferenceRepository (+Remote/Mock/Local),
-            │                            ScreeningRepository, SyncRepository, SyncDataSource
-            └── ui/
-                ├── theme/               Color, Type, Theme (fixed high-contrast light)
-                ├── components/          PrimaryButton, SecondaryButton, ImagePreviewCard,
-                │                        ResultCard, ConfidenceIndicator, LoadingView,
-                │                        ErrorView, EmptyHistoryView, RetinalImageViewer,
-                │                        DisclaimerBanner, NetraScaffold, Formatters
-                ├── navigation/          Routes, NetraNavHost
-                ├── home/ patient/ imagesource/ camera/ preview/ result/
-                ├── history/             list + detail + view models
-                ├── sync/                sync screen + view model
-                └── screening/           ScreeningViewModel (shared across the flow)
-```
-
-### Architecture
-
-```
-Composable  →  ViewModel  →  Repository  →  Retrofit  →  FastAPI
-                                  ↘  Room (offline history)
-```
-
-Retrofit is never called from a Composable. Screens receive plain state and callbacks; all I/O
-happens in a repository on `Dispatchers.IO`.
-
-The whole PATIENT → IMAGE → PREVIEW → RESULT flow is one nested navigation graph sharing a single
-`ScreeningViewModel`. Leaving the graph destroys it, so the next patient always starts clean.
+The system is designed to continue working when internet connectivity is unavailable and synchronize pending screening data when the connection is restored.
 
 ---
 
-## 2. Size of the codebase
+## 1. System Overview
 
-52 Kotlin files plus the Gradle, manifest and resource scaffolding — the full layout is the tree
-above. No generated build output is tracked; `app/build/`, `.gradle/` and `local.properties` are
-ignored by git and recreated on each machine.
+```text
+                    NETRA SAHAYAK
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │   Android App       │
+              │   Jetpack Compose   │
+              └──────────┬──────────┘
+                         │
+                  Patient + Image
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │     FastAPI         │
+              │      Backend        │
+              └──────────┬──────────┘
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │   EfficientNet-B3   │
+              │   DR Classification │
+              └──────────┬──────────┘
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │      Grad-CAM       │
+              │   Explainability    │
+              └──────────┬──────────┘
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │ SQLite + Heatmaps   │
+              │ Screening Records   │
+              └──────────┬──────────┘
+                         │
+                         ▼
+                  Result to Android
+```
+
+The Android application handles the user workflow and local storage.
+
+The Python backend performs the actual AI inference and Grad-CAM generation.
 
 ---
 
-## 3. How to run the app
+## 2. Repository Structure
 
-**Option A — Android Studio (normal route)**
+```text
+SIH26038-DR-Screening/
+│
+├── app/                              # Android application
+│   └── src/main/java/com/sih/netrasahayak/
+│       ├── camera/
+│       ├── database/
+│       ├── di/
+│       ├── model/
+│       ├── network/
+│       ├── repository/
+│       └── ui/
+│
+├── gradle/
+├── build.gradle.kts
+├── settings.gradle.kts
+├── gradle.properties
+├── gradlew
+├── gradlew.bat
+│
+├── backend/                          # FastAPI + AI backend
+│   ├── main.py                       # FastAPI application
+│   ├── database.py                   # SQLAlchemy database setup
+│   ├── models.py                     # Screening database model
+│   ├── schemas.py                    # API schemas
+│   ├── test_model.py                 # Model test
+│   ├── test_gradcam.py               # Grad-CAM test
+│   │
+│   ├── model/
+│   │   └── efficientnet_b3_300_best.pth
+│   │                                  # Trained EfficientNet-B3 model
+│   │
+│   └── services/
+│       ├── prediction.py              # EfficientNet inference
+│       └── gradcam.py                 # Grad-CAM generation
+│
+└── README.md
+```
 
-1. Open Android Studio → *Open* → select the `NetraSahayak` folder.
-2. Let it sync (it downloads Gradle 8.7 and the AGP 8.5.2 dependencies once).
-3. Pick a device or emulator (API 24+) and press ▶︎.
+Runtime-generated files such as the SQLite database, uploaded images, generated heatmaps and Python cache files are intentionally excluded from Git.
 
-The debug build runs in **mock mode** — no backend needed. Pick any photo from the gallery and the
-full result screen, including a generated placeholder heatmap, appears.
+---
 
-**Option B — command line**
+## 3. Technology Stack
+
+### Android
+
+- Kotlin
+- Jetpack Compose
+- MVVM architecture
+- Retrofit
+- Room Database
+- CameraX
+- Coil
+- Coroutines
+
+### Backend
+
+- Python
+- FastAPI
+- SQLAlchemy
+- SQLite
+- PyTorch
+- Torchvision
+- timm
+- Pillow
+- OpenCV
+- pytorch-grad-cam
+
+### AI
+
+- EfficientNet-B3
+- Five-class diabetic retinopathy classification
+- Grad-CAM explainability
+
+---
+
+## 4. Diabetic Retinopathy Classes
+
+The AI model supports five classes:
+
+```text
+0 → No DR
+1 → Mild
+2 → Moderate
+3 → Severe
+4 → Proliferative DR
+```
+
+The model returns the predicted class together with a confidence score.
+
+---
+
+## 5. Android Application Flow
+
+The Android application follows this workflow:
+
+```text
+HOME
+  ↓
+START NEW SCREENING
+  ↓
+PATIENT DETAILS
+  ↓
+RETINAL IMAGE
+  ├── TAKE PHOTO
+  └── CHOOSE FROM GALLERY
+  ↓
+IMAGE PREVIEW
+  ↓
+ANALYZE IMAGE
+  ↓
+AI RESULT
+  ├── Prediction
+  ├── Confidence
+  ├── Recommendation
+  └── Grad-CAM explanation
+  ↓
+SCREENING HISTORY
+```
+
+The application stores screening information locally using Room.
+
+---
+
+## 6. Offline-First Workflow
+
+Offline operation is an important part of the system.
+
+When there is no internet connection:
+
+```text
+Patient Details
+      ↓
+Retinal Image
+      ↓
+Local Storage
+      ↓
+Pending Analysis
+      ↓
+Screening History
+```
+
+The user can continue using the application without being blocked by the network.
+
+When connectivity returns:
+
+```text
+Internet Restored
+       ↓
+SYNC DATA
+       ↓
+Pending Screening
+       ↓
+FastAPI /predict
+       ↓
+EfficientNet-B3
+       ↓
+Grad-CAM
+       ↓
+AI Result
+       ↓
+Room Record Updated
+       ↓
+Marked as Synced
+```
+
+This allows screening records to survive temporary connectivity problems common in rural environments.
+
+---
+
+## 7. Local Database
+
+The Android application uses Room to store screening records locally.
+
+The local screening record contains information such as:
+
+- Patient ID
+- Age
+- Gender
+- Diabetes duration
+- Original image path
+- Prediction
+- Confidence
+- Recommendation
+- Heatmap URL
+- Creation time
+- Synchronization status
+
+The backend separately uses SQLite through SQLAlchemy for server-side screening records.
+
+---
+
+## 8. FastAPI Backend
+
+The backend is located in:
+
+```text
+backend/
+```
+
+The main FastAPI application is:
+
+```text
+backend/main.py
+```
+
+Start the backend from the `backend` directory:
 
 ```bash
-cd NetraSahayak
-./gradlew assembleDebug     # macOS/Linux   → app/build/outputs/apk/debug/app-debug.apk
-.\\gradlew.bat assembleDebug # Windows
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-Requirements: JDK 17 and the Android SDK (API 34 platform + build-tools 34.0.0) — Android Studio
-installs both. See §3a if Gradle cannot find the SDK.
+The API can then be accessed at:
+
+```text
+http://localhost:8000
+```
+
+For a physical Android phone, the phone and computer must normally be connected to the same network and the Android application must use the computer's LAN IP.
 
 ---
 
-## 3a. First-time setup (Windows, macOS or Linux)
+## 9. Backend API
 
-The project is fully portable - nothing in the source hard-codes a path. Only `local.properties`
-is machine-specific, and it is deliberately **not** included (Gradle or Android Studio recreates it).
+### Health Check
 
-**Recommended: Android Studio**
-
-1. Install [Android Studio](https://developer.android.com/studio) (bundles a JDK and the Android SDK).
-2. Unzip the project somewhere without spaces in the path, e.g. `C:\dev\NetraSahayak`.
-3. Android Studio → **Open** → select the `NetraSahayak` folder.
-4. It will say the SDK location is missing and offer to fix it - accept. That writes
-   `local.properties` with the Windows SDK path, e.g. `sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk`.
-5. Let Gradle sync (first run downloads Gradle 8.7 and the dependencies - a few minutes).
-6. Choose a device or emulator (API 24+) and press **Run**.
-
-**Command line (PowerShell)**
-
-```powershell
-cd C:\dev\NetraSahayak
-.\gradlew.bat assembleDebug      # APK -> app\build\outputs\apk\debug\app-debug.apk
-.\gradlew.bat installDebug       # build + install on a connected device/emulator
+```http
+GET /health
 ```
 
-Requires JDK 17 and the Android SDK (API 34 + build-tools 34.0.0). If Gradle cannot find the SDK,
-create `local.properties` in the project root containing your own path:
-
-```
-sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
-```
-
-**Note:** `run.sh` and `tools/push_sample_image.sh` are macOS/Linux helpers. On Windows use
-Android Studio's Run button, or the `gradlew.bat` commands above. `tools/fake_backend.py` is
-pure Python and works everywhere (`python tools\fake_backend.py`).
-
----
-
-## 3b. Trying it out
-
-Once the project runs, there is nothing else to configure — the debug build works offline with no
-backend at all.
-
-```bash
-./run.sh                       # macOS/Linux: starts an emulator if needed, builds, installs, launches
-./run.sh emulator              # just start an emulator
-./tools/push_sample_image.sh   # put a sample retinal image in the device's gallery
-```
-
-On Windows, press **Run** in Android Studio instead, and add the sample image by dragging
-`tools/sample_fundus.jpg` onto the running emulator window.
-
-Then, in the app: **START NEW SCREENING** → Patient ID `P001`, Age `55` → **CONTINUE** →
-**CHOOSE FROM GALLERY** → pick the sample → **ANALYZE IMAGE**. A result and a generated heatmap
-appear after about two seconds. Try the ORIGINAL / HEATMAP / OVERLAY toggle, press **DONE**, then
-open **SCREENING HISTORY**.
-
-Useful commands (`adb` lives in `<Android SDK>/platform-tools`):
-
-```bash
-adb logcat | grep -i netrasahayak                  # app logs
-adb shell cmd connectivity airplane-mode enable    # test offline behaviour
-adb shell cmd connectivity airplane-mode disable
-adb devices                                        # list connected devices
-adb emu kill                                       # shut the emulator down
-```
-
-### Trying the real network path without a backend
-
-`tools/fake_backend.py` is a stdlib-only stand-in that speaks the exact `/predict` contract and
-serves a heatmap from `/results/`. Useful for checking the Retrofit path before the FastAPI server
-exists:
-
-```bash
-python3 tools/fake_backend.py    # listens on :8000, prints the multipart parts it receives
-```
-
-Then set `USE_MOCK_API` to `false` in `app/build.gradle.kts`, rebuild, and screen a patient — the
-request goes over the wire to that server. Set it back to `true` afterwards.
-
-### Testing on a real Android phone
-
-Enable Developer options → USB debugging, plug it in, then `./gradlew installDebug`. For a real
-backend, set `BASE_URL` to your computer's LAN IP (e.g. `http://192.168.1.7:8000/`) and start
-uvicorn with `--host 0.0.0.0`.
-
----
-
-## 4. How to connect the FastAPI backend
-
-1. Run FastAPI on your machine: `uvicorn main:app --host 0.0.0.0 --port 8000`
-2. Turn the mock off — in `app/build.gradle.kts`, `defaultConfig`:
-   ```kotlin
-   buildConfigField("boolean", "USE_MOCK_API", "false")
-   ```
-3. Point `BASE_URL` at the server (see §7).
-4. Rebuild and run.
-
-For a reference implementation the backend needs to satisfy exactly this:
-
-```python
-from fastapi import FastAPI, File, Form, UploadFile
-
-app = FastAPI()
-
-@app.post("/predict")
-async def predict(
-    image: UploadFile = File(...),
-    patient_id: str | None = Form(None),
-    age: int | None = Form(None),
-    gender: str | None = Form(None),
-    diabetes_duration: int | None = Form(None),
-):
-    # EfficientNet inference + Grad-CAM here
-    return {
-        "prediction": "Moderate Diabetic Retinopathy",
-        "confidence": 0.91,
-        "heatmap_url": "/results/abc123_heatmap.jpg",
-        "recommendation": "Clinical evaluation by an ophthalmologist is recommended.",
-    }
-```
-
-The heatmap file must be reachable over HTTP — e.g.
-`app.mount("/results", StaticFiles(directory="results"))` — because Android loads it by URL.
-
----
-
-## 5. Expected API request format
-
-`POST {BASE_URL}predict`, `Content-Type: multipart/form-data`
-
-| Part | Required | Type | Notes |
-|---|---|---|---|
-| `image` | yes | file (`image/jpeg`) | Down-scaled to max 1024 px on the long edge, EXIF-rotated upright, JPEG quality 90 |
-| `patient_id` | optional | text | |
-| `age` | optional | text (integer) | |
-| `gender` | optional | text | `female` \| `male` \| `other` |
-| `diabetes_duration` | optional | text (integer years) | |
-
-Optional parts are omitted entirely when the worker did not fill them in.
-Defined in `network/NetraApiService.kt`; the multipart body is assembled in
-`repository/RemoteInferenceRepository.kt`.
-
----
-
-## 6. Expected API response format
+Example response:
 
 ```json
 {
-  "prediction": "Moderate Diabetic Retinopathy",
-  "confidence": 0.91,
-  "heatmap_url": "/results/abc123_heatmap.jpg",
+  "status": "healthy"
+}
+```
+
+---
+
+### AI Screening
+
+```http
+POST /predict
+```
+
+Content type:
+
+```text
+multipart/form-data
+```
+
+Fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `image` | file | Retinal image |
+| `patient_id` | text | Patient identifier |
+| `age` | integer | Patient age |
+| `gender` | text | Gender |
+| `diabetes_duration` | number | Diabetes duration |
+
+The backend:
+
+1. Receives the retinal image
+2. Saves the uploaded image
+3. Preprocesses the image
+4. Runs EfficientNet-B3
+5. Determines the predicted DR class
+6. Calculates confidence
+7. Generates a Grad-CAM heatmap
+8. Saves the screening record
+9. Returns the result to Android
+
+Example response:
+
+```json
+{
+  "prediction": "Proliferative DR",
+  "confidence": 0.9998,
+  "heatmap_url": "/heatmaps/example_heatmap.jpg",
   "recommendation": "Clinical evaluation by an ophthalmologist is recommended."
 }
 ```
 
-Mapped by `network/dto/PredictionResponseDto.kt` → `model/ScreeningResult.kt`.
+---
 
-- `prediction` — parsing is forgiving (`model/DrClass.kt`): `"Moderate Diabetic Retinopathy"`,
-  `"moderate_dr"`, `"Moderate DR"` and `"2"` all resolve to the same grade. An unrecognised value
-  produces a clean *"unexpected reply"* message rather than a crash.
-- `confidence` — `0.91` or `91` both work; clamped to 0–1.
-- `heatmap_url` — relative or absolute. Relative paths are resolved against `BASE_URL`
-  (`RetrofitProvider.resolveUrl`). May be omitted; the UI then hides the heatmap views.
-- `recommendation` — optional. If missing, a sensible default for that grade is used.
+### Screening Record Upload
 
-The five supported classes: No / Mild / Moderate / Severe / Proliferative Diabetic Retinopathy.
+```http
+POST /screenings
+```
+
+This endpoint is used by the synchronization workflow to upload completed local screening records to the backend.
 
 ---
 
-## 7. Where to put the backend URL
+### Screening History
 
-`app/build.gradle.kts` — it is a `BuildConfig` field, so it is never hardcoded in Kotlin and can
-differ per build type. No API keys or credentials are stored anywhere in the app.
+```http
+GET /screenings
+```
+
+Returns screening records stored by the backend.
+
+---
+
+### Synchronization Endpoint
+
+```http
+POST /sync
+```
+
+The project also contains a synchronization endpoint for backend integration and demonstration.
+
+The Android application primarily performs synchronization through the screening upload flow implemented in `SyncRepository` and `SyncDataSource`.
+
+---
+
+## 10. Grad-CAM Explainability
+
+Grad-CAM is generated on the Python backend.
+
+It is **not calculated on Android**.
+
+The process is:
+
+```text
+Retinal Image
+      ↓
+EfficientNet-B3
+      ↓
+Predicted Class
+      ↓
+Grad-CAM
+      ↓
+Heatmap
+      ↓
+HTTP /heatmaps/...
+      ↓
+Android App
+```
+
+The Android application provides three viewing modes:
+
+```text
+[ ORIGINAL ] [ HEATMAP ] [ OVERLAY ]
+```
+
+### ORIGINAL
+
+Displays the original retinal image.
+
+### HEATMAP
+
+Displays the Grad-CAM explanation generated by the backend.
+
+### OVERLAY
+
+Displays the heatmap over the original retinal image.
+
+The highlighted regions indicate areas that contributed to the model's prediction.
+
+Grad-CAM is an explanation of the model's behaviour and should not be interpreted as a clinical diagnosis.
+
+---
+
+## 11. AI Model
+
+The trained model is included in this repository:
+
+```text
+backend/model/efficientnet_b3_300_best.pth
+```
+
+Model:
+
+```text
+EfficientNet-B3
+```
+
+Input size:
+
+```text
+300 × 300
+```
+
+Number of classes:
+
+```text
+5
+```
+
+The backend loads the model using PyTorch/timm and performs inference on the available device.
+
+The project can run on CPU when CUDA is unavailable.
+
+---
+
+## 12. Backend Model Testing
+
+The repository includes:
+
+```text
+backend/test_model.py
+backend/test_gradcam.py
+```
+
+The model test verifies that the EfficientNet-B3 model can be loaded and used for prediction.
+
+The Grad-CAM test verifies that a heatmap can be generated successfully from an input retinal image.
+
+---
+
+## 13. Android Configuration
+
+The backend URL is configured through `BuildConfig`.
+
+In:
+
+```text
+app/build.gradle.kts
+```
+
+the application can be configured with:
 
 ```kotlin
-defaultConfig {
-    buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:8000/\"")   // emulator → your laptop
-    buildConfigField("boolean", "USE_MOCK_API", "true")
+buildConfigField(
+    "String",
+    "BASE_URL",
+    "\"http://YOUR_COMPUTER_IP:8000/\""
+)
+
+buildConfigField(
+    "boolean",
+    "USE_MOCK_API",
+    "false"
+)
+```
+
+### Emulator
+
+When FastAPI is running on the same computer:
+
+```text
+http://10.0.2.2:8000/
+```
+
+### Physical Android phone
+
+Use the computer's LAN IP:
+
+```text
+http://192.168.x.x:8000/
+```
+
+The phone and computer must be reachable on the same network.
+
+Do not copy a specific developer's LAN IP into another machine. Replace it with the current computer's IP address.
+
+---
+
+## 14. Running the Android Application
+
+### Requirements
+
+- Android Studio
+- Android SDK
+- JDK
+- Android device or emulator
+
+Open the repository in Android Studio:
+
+```text
+SIH26038-DR-Screening/
+```
+
+Then allow Gradle to synchronize.
+
+Build from Windows PowerShell:
+
+```powershell
+.\gradlew.bat assembleDebug
+```
+
+Install on a connected device:
+
+```powershell
+.\gradlew.bat installDebug
+```
+
+---
+
+## 15. Running the Backend
+
+Open a terminal:
+
+```powershell
+cd C:\SIH\SIH26038-DR-Screening\backend
+```
+
+Activate the Python virtual environment if one is being used:
+
+```powershell
+cd ..
+.\.venv\Scripts\Activate.ps1
+cd backend
+```
+
+Start FastAPI:
+
+```powershell
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Verify:
+
+```text
+http://localhost:8000/health
+```
+
+Expected:
+
+```json
+{
+  "status": "healthy"
 }
-buildTypes {
-    release {
-        buildConfigField("String", "BASE_URL", "\"https://your-server.example.com/\"")
-        buildConfigField("boolean", "USE_MOCK_API", "false")
-    }
-}
 ```
 
-| Where you run FastAPI | BASE_URL |
-|---|---|
-| Laptop + Android **emulator** | `http://10.0.2.2:8000/` |
-| Laptop + **physical phone** on the same Wi-Fi | `http://192.168.x.x:8000/` |
-| Cloud / production | `https://your-domain/` |
-
-The value is read once through `AppConfig.BASE_URL` and used by `RetrofitProvider`.
-
-**Cleartext http:** Android blocks plain `http://` by default at `targetSdk 34`, so the app ships a
-network security config:
-
-| File | Applies to | Policy |
-|---|---|---|
-| `app/src/debug/res/xml/network_security_config.xml` | debug builds | cleartext allowed (10.0.2.2, localhost, any LAN IP) |
-| `app/src/main/res/xml/network_security_config.xml` | release builds | **HTTPS only** |
-
-So `http://10.0.2.2:8000/` works out of the box while developing, and a release build cannot silently
-fall back to unencrypted traffic. **Production must use HTTPS.**
-
 ---
 
-## 8. How camera input works
+## 16. End-to-End Architecture
 
-- Tapping **TAKE PHOTO** on the Image Source screen is the *only* moment the `CAMERA` permission is
-  requested. Denial shows a plain message, never a crash.
-- `ui/camera/CameraScreen.kt` hosts a CameraX `PreviewView` and one large CAPTURE button. It
-  re-checks permission itself, so RETAKE also works when the user arrived via the gallery.
-- All CameraX work sits behind `camera/RetinalCameraController` (interface), implemented today by
-  `camera/PhoneCameraController` using the ordinary rear camera. **No fundus-camera SDK is assumed.**
-  When a real fundus device arrives, add a second implementation of that interface and return it
-  from `ServiceLocator.createCameraController()` — no screen changes needed.
-- The photo is written to the app cache (`ImageUtils.newCaptureFile`) and handed back as a `Uri`.
+The complete working path is:
 
-## 9. How gallery input works
-
-- **CHOOSE FROM GALLERY** uses `ActivityResultContracts.PickVisualMedia` — Android's modern photo
-  picker. It needs **no storage permission**, and falls back to the document picker on older
-  devices automatically.
-- The chosen `Uri` is verified as a decodable image (`ImageUtils.isReadableImage`) before the app
-  moves on; an unreadable file produces *"This file is not a valid image."*
-
-### Image handling (both sources)
-
-`camera/ImageUtils.kt` does the work:
-- **Original preserved** — copied byte-for-byte into app-private storage so history can show it.
-- **Upload copy only** is modified: down-sampled to ≤1024 px, EXIF rotation applied, JPEG q90.
-- Out-of-memory on a huge file becomes *"This image is too large to process."*
-- Upload temp files are deleted after the request; the original is untouched.
-- The backend still performs all ML preprocessing.
-
----
-
-## 10. How the Grad-CAM heatmap is displayed
-
-`ui/components/RetinalImageViewer.kt` shows one square image with a three-way toggle:
-
-```
-[ ORIGINAL ]   [ HEATMAP ]   [ OVERLAY ]
+```text
+ANDROID
+   │
+   │ Patient details + retinal image
+   ▼
+FastAPI
+   │
+   ▼
+EfficientNet-B3
+   │
+   ├──────────────► Prediction
+   │
+   ▼
+Grad-CAM
+   │
+   └──────────────► Heatmap
+                     │
+                     ▼
+                  FastAPI
+                     │
+                     ▼
+                  Android
+                     │
+             ┌───────┴────────┐
+             ▼                ▼
+          Result           Room DB
+                              │
+                              ▼
+                         History / Sync
 ```
 
-- **ORIGINAL** — the retinal photo as captured.
-- **HEATMAP** — the image at `heatmap_url`, loaded by Coil straight from the backend.
-- **OVERLAY** — the heatmap drawn on top of the original at 55 % alpha, both with
-  `ContentScale.Fit` so they align.
-
-If `heatmap_url` is absent, the last two are disabled and a short line explains why. Above it the
-result screen shows *"Why this result?"* and *"Highlighted regions indicate areas that contributed
-to the AI model's prediction."*
-
-Grad-CAM is **not** computed on Android — the app only displays what Python returns. The same
-viewer is reused on the history detail screen.
-
 ---
 
-## 11. Replacing the mock API with the real API
+## 17. Offline → Online Synchronization
 
-One flag, one place:
+A tested synchronization scenario is:
 
-```kotlin
-// app/build.gradle.kts
-buildConfigField("boolean", "USE_MOCK_API", "false")
+```text
+1. Android phone loses internet
+2. User creates a screening
+3. Screening is stored locally
+4. History displays the pending screening
+5. Internet connection is restored
+6. User opens Sync Data
+7. Pending screening is sent to the backend
+8. FastAPI performs EfficientNet inference
+9. Grad-CAM heatmap is generated
+10. Result is returned
+11. Local Room record is updated
+12. Record is marked synced
+13. Pending count becomes zero
 ```
 
-`di/ServiceLocator.kt` reads it and hands the ViewModel either
-`MockInferenceRepository` or `RemoteInferenceRepository`. Nothing else changes — the ViewModel and
-every screen depend only on the `InferenceRepository` interface.
-
-The release build type already sets `USE_MOCK_API = false`, so **a release APK can never use mock
-data.** All mock code is confined to `MockInferenceRepository` and `MockSyncDataSource`, both marked
-`MOCK / DEMO ONLY` in comments. There is no fake prediction logic anywhere in the production path.
-
-**Offline inference later:** `repository/LocalInferenceRepository.kt` is the reserved slot for a
-bundled TensorFlow Lite EfficientNet. Its header documents the exact steps (add the TFLite
-dependency, drop the `.tflite` in `assets/`, implement `analyze`, return it from `ServiceLocator`).
-Until then it fails with a clear message rather than pretending to work.
+This allows the application to tolerate temporary network interruptions.
 
 ---
 
-## 12. Offline behaviour
+## 18. Data and Runtime Files
 
-Works with **no internet**: home, patient details, camera, gallery, image preview, screening
-history (list + detail with the stored image), and the Sync screen's status.
+The following runtime-generated files are intentionally not stored in Git:
 
-Needs internet: only the analysis request itself (and loading a heatmap that lives on the server).
-The app never blocks navigation because the phone is offline — it says so and carries on.
+```text
+backend/screening.db
+backend/uploads/
+backend/heatmaps/
+__pycache__/
+*.pyc
+```
 
-Results are written to Room immediately after the server replies, marked `synced = false`. The Sync
-screen shows the connection state and how many records are waiting, and **SYNC NOW** pushes them
-through `SyncRepository` / `SyncDataSource`.
+These files are created locally when the application runs.
 
----
-
-## 13. Error handling
-
-Every failure is an `AppError` (`model/AppError.kt`) with a plain-language message. Raw exceptions
-and stack traces are never shown. Covered: camera permission denied, camera unavailable, no image
-selected, invalid image, image too large, no internet, timeout, server unreachable, HTTP error
-codes, invalid/unparseable response, failed upload, local storage failure, empty Patient ID,
-invalid age, offline model unavailable.
-
-Duplicate submissions are prevented in `ScreeningViewModel.analyze()` and `SyncViewModel.syncNow()`.
+The trained EfficientNet model is included because it is required for reproducing the backend inference workflow.
 
 ---
 
-## 14. Known limitations
+## 19. Security and Privacy Notes
 
-1. **No fundus camera.** Ordinary phone photos are not clinically adequate input for a DR model.
-   The camera abstraction is ready for a real device, but screening quality depends on it.
-2. **Mock results are meaningless.** In demo mode the grade is derived from the Patient ID hash so
-   demos are repeatable — it carries no clinical information whatsoever.
-3. **`POST /screenings` (sync) is a proposed contract.** No backend implements it yet; with
-   `USE_MOCK_API = false` the Sync screen will report a server error until it exists.
-4. **TFLite offline inference is an integration point only** — not implemented.
-5. **Gallery URI lifetime.** A picked `content://` URI is valid for the current process. If Android
-   kills the app while the preview is open, re-pick the image. Once analysed, the image is copied
-   into app storage and is permanent.
-6. **Heatmaps from the server are not cached offline** — only their URL is stored. A history item
-   opened without internet shows the original image; the heatmap views need a connection.
-   (Mock-mode heatmaps are local files and always available.)
-7. **Portrait only, light theme only** — deliberate, for consistency and daylight readability.
-8. **No authentication.** Out of scope for the MVP, as specified.
+This project is an MVP/prototype for SIH.
+
+Current limitations include:
+
+- No user authentication
+- No production authorization system
+- Local HTTP may be used during development
+- Production deployment should use HTTPS
+- Patient data should be handled according to applicable privacy and healthcare requirements
+- The AI output is screening assistance, not a final diagnosis
+
+---
+
+## 20. Clinical Disclaimer
+
+Netra Sahayak is intended as an AI-assisted screening support tool.
+
+It does **not** replace:
+
+- Ophthalmologist examination
+- Clinical diagnosis
+- Professional medical judgement
+- Appropriate retinal imaging equipment
+
+Final diagnosis and treatment decisions must be made by qualified healthcare professionals.
+
+---
+
+## 21. Current MVP Limitations
+
+1. A dedicated fundus camera is not included.
+2. Screening quality depends on the quality of the retinal image.
+3. The AI model is intended for screening support and requires appropriate clinical validation before real-world clinical deployment.
+4. TFLite-based fully offline AI inference on the Android device is not currently implemented.
+5. Server-generated heatmaps require connectivity to the backend unless separately cached.
+6. Authentication is outside the current MVP scope.
+7. The backend is currently intended to run locally for demonstration and development.
+
+---
+
+## 22. Project Status
+
+### Implemented
+
+- [x] Android Jetpack Compose application
+- [x] Patient details workflow
+- [x] Camera input
+- [x] Gallery input
+- [x] Image preview
+- [x] FastAPI integration
+- [x] EfficientNet-B3 inference
+- [x] Five-class DR prediction
+- [x] Confidence score
+- [x] Grad-CAM generation
+- [x] Heatmap display
+- [x] Original / Heatmap / Overlay views
+- [x] Room local database
+- [x] Offline screening storage
+- [x] Screening history
+- [x] Pending screening state
+- [x] Reconnection synchronization
+- [x] Backend SQLite storage
+- [x] Screening upload endpoint
+- [x] Backend health check
+- [x] Backend model test
+- [x] Backend Grad-CAM test
+
+---
+
+## 23. Team Project
+
+**Smart India Hackathon 2026**
+
+Problem Statement:
+
+```text
+SIH26038
+Explainable AI for Diabetic Retinopathy Screening in Rural India
+```
+
+Project:
+
+```text
+Netra Sahayak
+```
+
+The system is designed around explainable, accessible and connectivity-tolerant AI-assisted diabetic retinopathy screening.
+
+---
+
+## 24. License / Usage
+
+This repository is an academic prototype developed for Smart India Hackathon 2026.
+
+The AI model and software should not be considered clinically validated or approved for autonomous medical diagnosis.
